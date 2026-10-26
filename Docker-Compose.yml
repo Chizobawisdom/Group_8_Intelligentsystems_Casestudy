@@ -3,7 +3,9 @@ version: '3.8'
 services:
   # --- THE DATABASE ---
   db_nl2sql:
-    image: mariadb:11.8.8 # Using the same version as your current setup
+    build:
+      context: .
+      dockerfile: Dockerfile.db
     container_name: nl2sql_db
     restart: unless-stopped
     environment:
@@ -12,19 +14,10 @@ services:
       MYSQL_USER: app_user
       MYSQL_PASSWORD: app_password_change_me
     ports:
-      # IMPORTANT: 3306 is already used by your Vikas database. 
-      # We map 3307 on your computer to 3306 inside this container.
       - "3307:3306"
     volumes:
+      # Only keep the persistent data volume here
       - nl2sql_data:/var/lib/mysql
-      - type: bind
-        source: ./schema/schema.sql
-        target: /docker-entrypoint-initdb.d/1-schema.sql
-        read_only: true
-      - type: bind
-        source: ./schema/data.sql
-        target: /docker-entrypoint-initdb.d/2-data.sql
-        read_only: true
     networks:
       - nl2sql_net
 
@@ -34,10 +27,8 @@ services:
     container_name: nl2sql_app
     restart: unless-stopped
     volumes:
-      # Mount the data folder so the app can read questions.jsonl
       - ./data:/app/data
     environment:
-      # Point to the db_nl2sql service name
       DB_HOST: db_nl2sql
       DB_USER: app_user
       DB_PASSWORD: app_password_change_me
