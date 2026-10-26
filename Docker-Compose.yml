@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  # 1. The Database Container
+  mariadb:
+    image: mariadb:latest
+    container_name: nl2sql_db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password_change_me
+      MYSQL_DATABASE: production_db
+      MYSQL_USER: app_user
+      MYSQL_PASSWORD: app_password_change_me
+    ports:
+      - "3306:3306"
+    volumes:
+      - mariadb_data:/var/lib/mysql
+      # NOTE: Update these paths if your schema/data files are inside the data folder
+      # - ./data/schema.sql:/docker-entrypoint-initdb.d/1-schema.sql:ro
+      # - ./data/data.sql:/docker-entrypoint-initdb.d/2-data.sql:ro
+    networks:
+      - nl2sql_net
+
+  # 2. Your Python Application Container
+  app:
+    build: ./app  # Tells Docker to look inside the 'app' folder for the Dockerfile
+    container_name: nl2sql_app
+    restart: unless-stopped
+    # If you are using Streamlit or FastAPI, expose the port here
+    # ports:
+    #   - "8501:8501" 
+    volumes:
+      # Mounts your local data/benchmark folder into the container so the app can read questions.jsonl
+      - ./data:/app/data
+    environment:
+      # These connect to the mariadb service defined above
+      DB_HOST: mariadb
+      DB_USER: app_user
+      DB_PASSWORD: app_password_change_me
+      DB_NAME: production_db
+    depends_on:
+      - mariadb
+    networks:
+      - nl2sql_net
+
+volumes:
+  mariadb_data:
+
+networks:
+  nl2sql_net:
+    driver: bridge
