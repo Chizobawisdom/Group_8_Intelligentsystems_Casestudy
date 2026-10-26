@@ -1,20 +1,24 @@
-# Use an official Python runtime as a parent image
-FROM python:3.10-slim
+FROM python:3.12-slim
 
-# Set the working directory inside the container
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
 WORKDIR /app
 
-# Copy requirements first (for Docker caching)
+# Run as a non-root user
+RUN useradd --create-home --uid 1000 appuser
+
+# Copy requirements first (Docker layer caching)
 COPY requirements.txt .
+RUN pip install -r requirements.txt
 
-# Install dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+COPY --chown=appuser:appuser . .
+USER appuser
 
-# Copy the rest of your application code
-COPY . .
+# Default: run the evaluation (no web server needed)
+CMD ["python", "-m", "src.evaluation.run_eval"]
 
-# Command to run your app (adjust based on your framework)
-# Example for Streamlit:
-CMD ["streamlit", "run", "src/main.py"]
-# Example for FastAPI:
-# CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Only if you build a Streamlit demo:
+# EXPOSE 8501
+# CMD ["streamlit", "run", "src/app.py", "--server.address=0.0.0.0", "--server.port=8501"]

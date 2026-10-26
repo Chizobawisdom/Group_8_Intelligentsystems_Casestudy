@@ -1,9 +1,9 @@
 version: '3.8'
 
 services:
-  # 1. The Database Container
-  mariadb:
-    image: mariadb:latest
+  # --- THE DATABASE ---
+  db_nl2sql:
+    image: mariadb:11.8.8 # Using the same version as your current setup
     container_name: nl2sql_db
     restart: unless-stopped
     environment:
@@ -12,39 +12,44 @@ services:
       MYSQL_USER: app_user
       MYSQL_PASSWORD: app_password_change_me
     ports:
-      - "3306:3306"
+      # IMPORTANT: 3306 is already used by your Vikas database. 
+      # We map 3307 on your computer to 3306 inside this container.
+      - "3307:3306"
     volumes:
-      - mariadb_data:/var/lib/mysql
-      # NOTE: Update these paths if your schema/data files are inside the data folder
-      # - ./data/schema.sql:/docker-entrypoint-initdb.d/1-schema.sql:ro
-      # - ./data/data.sql:/docker-entrypoint-initdb.d/2-data.sql:ro
+      - nl2sql_data:/var/lib/mysql
+      - type: bind
+        source: ./schema/schema.sql
+        target: /docker-entrypoint-initdb.d/1-schema.sql
+        read_only: true
+      - type: bind
+        source: ./schema/data.sql
+        target: /docker-entrypoint-initdb.d/2-data.sql
+        read_only: true
     networks:
       - nl2sql_net
 
-  # 2. Your Python Application Container
+  # --- THE PYTHON APP ---
   app:
-    build: ./app  # Tells Docker to look inside the 'app' folder for the Dockerfile
+    build: ./app
     container_name: nl2sql_app
     restart: unless-stopped
-    # If you are using Streamlit or FastAPI, expose the port here
-    # ports:
-    #   - "8501:8501" 
     volumes:
-      # Mounts your local data/benchmark folder into the container so the app can read questions.jsonl
+      # Mount the data folder so the app can read questions.jsonl
       - ./data:/app/data
     environment:
-      # These connect to the mariadb service defined above
-      DB_HOST: mariadb
+      # Point to the db_nl2sql service name
+      DB_HOST: db_nl2sql
       DB_USER: app_user
       DB_PASSWORD: app_password_change_me
       DB_NAME: production_db
     depends_on:
-      - mariadb
+      - db_nl2sql
     networks:
       - nl2sql_net
 
+# Isolated volume and network
 volumes:
-  mariadb_data:
+  nl2sql_data:
 
 networks:
   nl2sql_net:
