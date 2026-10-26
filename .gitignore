@@ -1,5 +1,5 @@
 # Ignore environment files
-.env.example
+.env
 
 # Ignore local database data dumps (KEEP the schema if you put it in root)
 *.sql
