@@ -3,6 +3,7 @@ sqlalchemy
 pymysql              # pure-Python driver, works with MariaDB
 pandas
 python-dotenv
+mariadb
 
 # --- Agents / LLM ---
 langgraph

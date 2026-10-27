@@ -6,19 +6,19 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# Run as a non-root user
+# Install system dependencies required to build the mariadb python package
+RUN apt-get update && apt-get install -y \
+    gcc \
+    libmariadb-dev \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN useradd --create-home --uid 1000 appuser
 
-# Copy requirements first (Docker layer caching)
 COPY requirements.txt .
 RUN pip install -r requirements.txt
 
 COPY --chown=appuser:appuser . .
+
 USER appuser
 
-# Default: run the evaluation (no web server needed)
 CMD ["python", "-m", "src.evaluation.run_eval"]
-
-# Only if you build a Streamlit demo:
-# EXPOSE 8501
-# CMD ["streamlit", "run", "src/app.py", "--server.address=0.0.0.0", "--server.port=8501"]
