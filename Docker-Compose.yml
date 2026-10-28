@@ -1,51 +1,53 @@
-version: '3.8'
-
 services:
-  # 1. The Database Container
-  mariadb:
-    image: mariadb:latest
+  db:
+    image: mariadb:11.8
     container_name: nl2sql_db
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: root_password_change_me
-      MYSQL_DATABASE: production_db
-      MYSQL_USER: app_user
-      MYSQL_PASSWORD: app_password_change_me
+      MARIADB_ROOT_PASSWORD: nlp2sql
+      MARIADB_DATABASE: nlp2sql
+      MARIADB_USER: nlp2sql
+      MARIADB_PASSWORD: nlp2sql
     ports:
-      - "3306:3306"
+      - "3307:3306"
     volumes:
-      - mariadb_data:/var/lib/mysql
-      # NOTE: Update these paths if your schema/data files are inside the data folder
-      # - ./data/schema.sql:/docker-entrypoint-initdb.d/1-schema.sql:ro
-      # - ./data/data.sql:/docker-entrypoint-initdb.d/2-data.sql:ro
+      - nl2sql_data:/var/lib/mysql
+      # Init scripts run alphabetically, only on the first start (empty volume)
+      - ./data/schema/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+      - ./data/schema/data.sql:/docker-entrypoint-initdb.d/02_data.sql:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 90
+      start_period: 30s
     networks:
       - nl2sql_net
 
-  # 2. Your Python Application Container
   app:
-    build: ./app  # Tells Docker to look inside the 'app' folder for the Dockerfile
+    build: ./app
     container_name: nl2sql_app
-    restart: unless-stopped
-    # If you are using Streamlit or FastAPI, expose the port here
-    # ports:
-    #   - "8501:8501" 
-    volumes:
-      # Mounts your local data/benchmark folder into the container so the app can read questions.jsonl
-      - ./data:/app/data
+    restart: "unless-stopped"
     environment:
-      # These connect to the mariadb service defined above
-      DB_HOST: mariadb
-      DB_USER: app_user
-      DB_PASSWORD: app_password_change_me
-      DB_NAME: production_db
+      DB_HOST: db
+      DB_USER: nlp2sql
+      DB_PASSWORD: nlp2sql
+      DB_NAME: nlp2sql
+      LLM_MODEL: ${LLM_MODEL}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./data:/app/data
+      - ./app:/app 
     depends_on:
-      - mariadb
+      db:
+        condition: service_healthy
     networks:
       - nl2sql_net
 
 volumes:
-  mariadb_data:
+  nl2sql_data:
 
 networks:
   nl2sql_net:
-    driver: bridge

@@ -1,20 +1,24 @@
-# Use an official Python runtime as a parent image
-FROM python:3.10-slim
+FROM python:3.12-slim
 
-# Set the working directory inside the container
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
 WORKDIR /app
 
-# Copy requirements first (for Docker caching)
+# Install system dependencies required to build the mariadb python package
+RUN apt-get update && apt-get install -y \
+    gcc \
+    libmariadb-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN useradd --create-home --uid 1000 appuser
+
 COPY requirements.txt .
+RUN pip install -r requirements.txt
 
-# Install dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+COPY --chown=appuser:appuser . .
 
-# Copy the rest of your application code
-COPY . .
+USER appuser
 
-# Command to run your app (adjust based on your framework)
-# Example for Streamlit:
-CMD ["streamlit", "run", "src/main.py"]
-# Example for FastAPI:
-# CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["streamlit", "run", "src/ui.py", "--server.address=0.0.0.0", "--server.port=8501"] # for launching the streamlit UI, change the file path if you want to run a different script

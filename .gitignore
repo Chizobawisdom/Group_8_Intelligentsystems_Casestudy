@@ -1,5 +1,7 @@
 # Ignore environment files
 .env
+data/
+schema/
 
 # Ignore local database data dumps (KEEP the schema if you put it in root)
 *.sql
