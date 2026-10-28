@@ -27,7 +27,7 @@ services:
   app:
     build: ./app
     container_name: nl2sql_app
-    restart: "no"
+    restart: "unless-stopped"
     environment:
       DB_HOST: db
       DB_USER: nlp2sql
@@ -35,6 +35,8 @@ services:
       DB_NAME: nlp2sql
       LLM_MODEL: ${LLM_MODEL}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+    ports:
+      - "8501:8501"
     volumes:
       - ./data:/app/data
       - ./app:/app 

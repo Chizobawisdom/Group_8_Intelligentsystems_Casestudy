@@ -23,6 +23,12 @@ Rules:
 - The data ends on 2026-07-16; treat that date as "today". Dates before the year 2000 (for example 0001-01-01) are placeholders.
 - Return only the SQL. No explanation and no markdown.
 
+Important Data Rules:
+- Cycle Time (DLZ): To calculate time differences, use `TIMESTAMPDIFF(MINUTE, azeit, bzeit)`. If `bzeit` < `azeit`, the process crossed midnight. You must add 24 hours to the end time.
+- First Record: To find the first record for a serial number on a day, use `MIN(CONCAT(datum, ' ', azeit))`.
+- Not Exists: If asked for units that never reached a step, use `NOT EXISTS (SELECT 1 FROM ...)`.
+- Distinct Units: "How many units/serials" always means `COUNT(DISTINCT serial)`.
+
 Schema:
 {schema}
 """
@@ -53,9 +59,16 @@ def _to_text(content) -> str:
 
 
 def extract_sql(text: str) -> str:
-    """Strip markdown fences and make sure the statement ends with exactly one semicolon."""
+    """Strip markdown fences and any chatty text before the SQL starts."""
+    # 1. Remove markdown fences if they exist
     match = re.search(r"```(?:sql)?\s*(.*?)```", text, re.DOTALL | re.IGNORECASE)
     sql = match.group(1) if match else text
+    
+    # 2. Find the first instance of SELECT or WITH and cut everything before it
+    match_sql = re.search(r"(?i)\b(SELECT|WITH)\b", sql)
+    if match_sql:
+        sql = sql[match_sql.start():]
+        
     return sql.strip().rstrip(";") + ";"
 
 
@@ -67,16 +80,29 @@ def generate_sql(llm, schema_text: str, question: str) -> str:
     return extract_sql(_to_text(llm.invoke(messages).content))
 
 
-def main(n: int = 3) -> None:
+def main(n: int = None) -> None:
     llm = build_llm()
     schema_text = get_schema_text()
     with QUESTIONS.open(encoding="utf-8") as f:
         items = [json.loads(line) for line in f if line.strip()]
+    
+    results = []
+    # If n is None, run all questions
     for item in items[:n]:
-        print(f"Q{item['id']}: {item['question']}")
-        print("Generated:", generate_sql(llm, schema_text, item["question"]))
-        print("Gold:     ", item["gold_sql"])
-        print()
+        print(f"Processing Q{item['id']}...")
+        generated_sql = generate_sql(llm, schema_text, item["question"])
+        results.append({
+            "id": item["id"],
+            "question": item["question"],
+            "gold_sql": item["gold_sql"],
+            "generated_sql": generated_sql
+        })
+    
+    # Save to a file for the evaluator to read
+    Path("data/benchmark/baseline_predictions.json").write_text(
+        json.dumps(results, indent=2), encoding="utf-8"
+    )
+    print("Saved predictions to data/benchmark/baseline_predictions.json")
 
 
 if __name__ == "__main__":

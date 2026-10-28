@@ -21,4 +21,4 @@ COPY --chown=appuser:appuser . .
 
 USER appuser
 
-CMD ["python", "-m", "src.evaluation.run_eval"]
+CMD ["streamlit", "run", "src/ui.py", "--server.address=0.0.0.0", "--server.port=8501"] # for launching the streamlit UI, change the file path if you want to run a different script

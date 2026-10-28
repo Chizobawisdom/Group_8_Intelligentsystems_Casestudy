@@ -4,22 +4,13 @@ pymysql              # pure-Python driver, works with MariaDB
 pandas
 python-dotenv
 mariadb
-
-# --- Agents / LLM ---
 langgraph
 langchain-core
 langchain-anthropic
 pydantic
 
-# --- SQL safety (SELECT-only check, add LIMIT) ---
 sqlglot
 
-# --- Schema linking (optional, for schema retrieval) ---
-# chromadb
-# sentence-transformers
-
-# --- Evaluation / dev ---
 tqdm
 pytest
-# matplotlib          # plots for the report
 streamlit           # only if you build a demo UI
