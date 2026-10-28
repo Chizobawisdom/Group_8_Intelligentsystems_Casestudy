@@ -30,8 +30,8 @@ The pipeline is fully Dockerized and consists of the following components:
     - Open http://localhost:8501 in your browser.
 
 ## Results
- - Baseline Accuracy: %
- - Agent Accuracy: %
+ - Baseline Accuracy: 78.95%
+ - Agent Accuracy: 89.47%
 
 ---
 
