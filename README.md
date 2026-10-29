@@ -16,7 +16,9 @@ The pipeline is fully Dockerized and consists of the following components:
  - An Anthropic API Key (for Claude)
  - Production DB sql snapshot as data/schema/data.sql
     - If the Production DB is replaced, the column_descriptions.json should also be updated to match the new data
+    - The prompt can also be updated to match the new SQL query
  - Production DB sql schema as data/schema/schema.sql
+ - To use a live sql server, replace the server details in the Docker-Compose.yml file
 
 ## Installation & Setup
  - Clone the repository with the terminal: git clone https://github.com/Chizobawisdom/Group_8_Intelligentsystems_Casestudy.git
