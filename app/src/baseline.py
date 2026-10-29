@@ -5,34 +5,13 @@ import json
 import os
 import re
 from pathlib import Path
-
+from prompter import load_prompt
 from langchain_anthropic import ChatAnthropic
-
 from connect import get_engine
 from get_schema import add_sample_values, format_for_prompt, get_schema, load_descriptions
 
 QUESTIONS = Path("data/benchmark/questions.jsonl")
-
-SYSTEM_PROMPT = """You are an expert MariaDB analyst.
-Write exactly ONE SQL query that answers the user's question.
-
-Rules:
-- Use only the table and columns listed in the schema below.
-- Output a single SELECT statement. Never modify data.
-- Many columns are stored as VARCHAR, so compare them with quoted strings (for example aktion = '29').
-- The data ends on 2026-07-16; treat that date as "today". Dates before the year 2000 (for example 0001-01-01) are placeholders.
-- Return only the SQL. No explanation and no markdown.
-
-Important Data Rules:
-- Cycle Time (DLZ): To calculate time differences, use `TIMESTAMPDIFF(MINUTE, azeit, bzeit)`. If `bzeit` < `azeit`, the process crossed midnight. You must add 24 hours to the end time.
-- First Record: To find the first record for a serial number on a day, use `MIN(CONCAT(datum, ' ', azeit))`.
-- Not Exists: If asked for units that never reached a step, use `NOT EXISTS (SELECT 1 FROM ...)`.
-- Distinct Units: "How many units/serials" always means `COUNT(DISTINCT serial)`.
-
-Schema:
-{schema}
-"""
-
+SYSTEM_PROMPT = load_prompt("baseline_system_prompt.txt")
 
 def build_llm():
     return ChatAnthropic(model=os.environ["LLM_MODEL"], max_tokens=1024)
