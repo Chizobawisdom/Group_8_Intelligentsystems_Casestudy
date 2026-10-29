@@ -11,7 +11,7 @@ from connect import get_engine
 from get_schema import add_sample_values, format_for_prompt, get_schema, load_descriptions
 
 QUESTIONS = Path("data/benchmark/questions.jsonl")
-SYSTEM_PROMPT = load_prompt("baseline_system_prompt.txt")
+SYSTEM_PROMPT = load_prompt("system_prompt.txt")
 
 def build_llm():
     return ChatAnthropic(model=os.environ["LLM_MODEL"], max_tokens=1024)
