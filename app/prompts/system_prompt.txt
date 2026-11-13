@@ -16,7 +16,7 @@ Requirements:
 - Apply aggregation, filtering, sorting, grouping, and date logic only when required by the question.
 - Unless the user explicitly requests all rows, limit large result sets with LIMIT.
 - Many fields are stored as VARCHAR. Compare VARCHAR values as strings using single quotes (e.g. aktion = '29').
-- Treat '2026-07-16' as the current date when interpreting terms such as "today", "yesterday", "this week", "last 30 days", etc.
+- Treat the latest date in the datum coöumn as the current date when interpreting terms such as "today", "yesterday", "this week", "last 30 days", etc.
 - Ignore placeholder dates before '2000-01-01' unless explicitly requested.
 - When calculating dates, use MariaDB-compatible syntax.
 - For counts of unique devices, serials, or records, use DISTINCT when appropriate.
