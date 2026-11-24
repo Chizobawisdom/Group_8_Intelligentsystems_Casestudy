@@ -4,10 +4,14 @@ The LLM is chosen via environment variables (LLM_PROVIDER, LLM_MODEL), not in co
 import json
 import os
 import re
+from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from prompter import load_prompt
 from langchain_anthropic import ChatAnthropic
+from sqlalchemy.engine import Engine
 from connect import get_engine
+from evaluator import BASELINE_PREDICTIONS
 from get_schema import add_sample_values, format_for_prompt, get_schema, load_descriptions
 
 QUESTIONS = Path("data/benchmark/questions.jsonl")
@@ -17,14 +21,16 @@ def build_llm():
     return ChatAnthropic(model=os.environ["LLM_MODEL"], max_tokens=1024)
 
 
-def get_schema_text() -> str:
-    engine = get_engine()
-    cache = Path("/tmp/schema_cache_nlp2sql.json") 
-    if cache.exists():
+def get_schema_text(engine: Engine | None = None) -> str:
+    cache = Path("/tmp/schema_cache_nlp2sql.json") if engine is None else None
+    if cache is not None and cache.exists():
         schema = json.loads(cache.read_text(encoding="utf-8"))
     else:
-        schema = add_sample_values(engine, get_schema(engine))  # all tables of the connected DB
-        cache.write_text(json.dumps(schema, ensure_ascii=False, indent=2), encoding="utf-8")
+        if engine is None:
+            engine = get_engine()
+        schema = add_sample_values(engine, get_schema(engine))
+        if cache is not None:
+            cache.write_text(json.dumps(schema, ensure_ascii=False, indent=2), encoding="utf-8")
     return format_for_prompt(schema, load_descriptions())
 
 
@@ -59,29 +65,45 @@ def generate_sql(llm, schema_text: str, question: str) -> str:
     return extract_sql(_to_text(llm.invoke(messages).content))
 
 
-def main(n: int = None) -> None:
-    llm = build_llm()
-    schema_text = get_schema_text()
+def load_questions() -> list[dict]:
     with QUESTIONS.open(encoding="utf-8") as f:
-        items = [json.loads(line) for line in f if line.strip()]
-    
-    results = []
-    # If n is None, run all questions
-    for item in items[:n]:
+        return [json.loads(line) for line in f if line.strip()]
+
+
+def generate_predictions(
+    items: list[dict], predict_sql: Callable[[str], str], *, max_workers: int = 1
+) -> list[dict]:
+    def predict_item(item: dict) -> dict:
         print(f"Processing Q{item['id']}...")
-        generated_sql = generate_sql(llm, schema_text, item["question"])
-        results.append({
+        return {
             "id": item["id"],
             "question": item["question"],
             "gold_sql": item["gold_sql"],
-            "generated_sql": generated_sql
-        })
-    
-    # Save to a file for the evaluator to read
-    Path("data/benchmark/baseline_predictions.json").write_text(
-        json.dumps(results, indent=2), encoding="utf-8"
+            "generated_sql": predict_sql(item["question"]),
+        }
+
+    if max_workers == 1:
+        return [predict_item(item) for item in items]
+
+    executor = ThreadPoolExecutor(max_workers=max_workers)
+    try:
+        return list(executor.map(predict_item, items))
+    finally:
+        executor.shutdown(cancel_futures=True)
+
+
+def save_predictions(path: Path, predictions: list[dict]) -> None:
+    path.write_text(json.dumps(predictions, indent=2), encoding="utf-8")
+    print(f"Saved predictions to {path.as_posix()}")
+
+
+def main(n: int | None = None) -> None:
+    llm = build_llm()
+    schema_text = get_schema_text()
+    predictions = generate_predictions(
+        load_questions()[:n], lambda question: generate_sql(llm, schema_text, question)
     )
-    print("Saved predictions to data/benchmark/baseline_predictions.json")
+    save_predictions(BASELINE_PREDICTIONS, predictions)
 
 
 if __name__ == "__main__":

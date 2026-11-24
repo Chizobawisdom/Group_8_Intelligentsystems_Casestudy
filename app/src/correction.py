@@ -1,13 +1,15 @@
-import json
-from pathlib import Path
 from sqlalchemy import text
-from langchain_anthropic import ChatAnthropic
 
 from connect import get_engine
-from get_schema import add_sample_values, format_for_prompt, get_schema
-from baseline import build_llm, generate_sql, SYSTEM_PROMPT, get_schema_text
-
-QUESTIONS = Path("data/benchmark/questions.jsonl")
+from baseline import (
+    build_llm,
+    generate_predictions,
+    generate_sql,
+    get_schema_text,
+    load_questions,
+    save_predictions,
+)
+from evaluator import AGENT_PREDICTIONS
 
 def execute_sql(engine, query):
     try:
@@ -51,35 +53,18 @@ def run_correction_agent(engine, llm, schema_text, question):
             
     return sql_query
 
-def main(n: int = None):
+def main(n: int | None = None) -> None:
     engine = get_engine()
-    llm = build_llm()
-    schema_text = get_schema_text()
-    
-    with QUESTIONS.open(encoding="utf-8") as f:
-        items = [json.loads(line) for line in f if line.strip()]
-        
-    results = []
-    
-    # If n is None, run all questions
-    for item in items[:n]:
-        print(f"Processing Q{item['id']}: {item['question']}")
-        
-        # Run the agent loop
-        generated_sql = run_correction_agent(engine, llm, schema_text, item["question"])
-        
-        results.append({
-            "id": item["id"],
-            "question": item["question"],
-            "gold_sql": item["gold_sql"],
-            "generated_sql": generated_sql
-        })
-        print()
-    
-    # Save the agent's output for the evaluator
-    output_path = Path("data/benchmark/agent_predictions.json")
-    output_path.write_text(json.dumps(results, indent=2), encoding="utf-8")
-    print(f"✅ Saved agent predictions to {output_path}")
+    try:
+        llm = build_llm()
+        schema_text = get_schema_text()
+        predictions = generate_predictions(
+            load_questions()[:n],
+            lambda question: run_correction_agent(engine, llm, schema_text, question),
+        )
+        save_predictions(AGENT_PREDICTIONS, predictions)
+    finally:
+        engine.dispose()
 
 if __name__ == "__main__":
     main()

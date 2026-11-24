@@ -31,13 +31,17 @@ def get_schema(engine: Engine, tables: list[str] | None = None) -> dict:
 
 
 def add_sample_values(engine: Engine, schema: dict, n: int = 3) -> dict:
-    # Names come from the inspector, not from user input, so f-strings are safe here
+    quote = engine.dialect.identifier_preparer.quote_identifier
     with engine.connect() as conn:
         for table, info in schema.items():
+            table_identifier = quote(table)
             for col in info["columns"]:
-                name = col["name"]
+                column_identifier = quote(col["name"])
                 rows = conn.execute(
-                    text(f"SELECT DISTINCT `{name}` FROM `{table}` WHERE `{name}` IS NOT NULL LIMIT {n}")
+                    text(
+                        f"SELECT DISTINCT {column_identifier} FROM {table_identifier} "
+                        f"WHERE {column_identifier} IS NOT NULL LIMIT {n}"
+                    )
                 ).fetchall()
                 col["examples"] = [str(r[0])[:50] for r in rows]
     return schema
