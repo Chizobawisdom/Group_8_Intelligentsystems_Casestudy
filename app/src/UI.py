@@ -1,4 +1,5 @@
 import os
+from time import perf_counter
 
 import pandas as pd
 import streamlit as st
@@ -7,10 +8,10 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from connect import create_database_engine
 from baseline import build_llm, generate_sql, get_schema_text
-from correction import run_correction_agent
+from correction import run_agent_with_details
 from main import main as run_benchmark
 
-st.set_page_config(page_title="Agentic NLP to SQL Agent", page_icon="🤖", layout="wide")
+st.set_page_config(page_title="Agentic NLP to SQL Artefact", page_icon="🤖", layout="wide")
 
 st.title("🤖 Agentic NLP-to-SQL Agent")
 st.markdown("Ask a question in plain English, and the AI Agent will generate and execute the SQL.")
@@ -18,6 +19,21 @@ st.markdown("Ask a question in plain English, and the AI Agent will generate and
 @st.cache_resource
 def load_llm():
     return build_llm()
+
+
+def show_query_results(engine, sql_query: str) -> None:
+    st.subheader("Query Results")
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(text(sql_query))
+            rows = result.fetchall()
+            if rows:
+                df = pd.DataFrame(rows, columns=result.keys())
+                st.dataframe(df, use_container_width=True)
+            else:
+                st.info("The query returned no results.")
+    except Exception as exc:
+        st.error(f"❌ SQL Execution Error:\n{exc}")
 
 
 st.sidebar.header("Database connection")
@@ -81,47 +97,49 @@ user_question = st.text_input("Enter your question:", placeholder="e.g., How man
 
 col1, col2 = st.columns(2)
 run_baseline_btn = col1.button("Run Baseline (No Agent)")
-run_agent_btn = col2.button("Run Agent (Self-Correction)")
+run_agent_btn = col2.button("Run Agent")
+col2.caption("Plans and reviews complex questions automatically.")
 
-if run_baseline_btn or run_agent_btn:
-    if not user_question:
-        st.warning("Please enter a question first.")
+if (run_baseline_btn or run_agent_btn) and not user_question:
+    st.warning("Please enter a question first.")
+elif run_baseline_btn:
+    with st.spinner("Generating baseline SQL..."):
+        sql_query = generate_sql(load_llm(), schema_text, user_question)
+    st.subheader("Baseline SQL")
+    st.code(sql_query, language="sql")
+    show_query_results(engine, sql_query)
+elif run_agent_btn:
+    started_at = perf_counter()
+    progress = st.empty()
+
+    def show_stage(stage: str) -> None:
+        progress.info(f"{stage}…")
+
+    try:
+        agent_run = run_agent_with_details(
+            engine, load_llm(), schema_text, user_question,
+            on_stage=show_stage,
+        )
+    except Exception:
+        progress.empty()
+        st.error("The agent could not finish. Check the database and model settings, then try again.")
     else:
-        with st.spinner("Thinking..."):
-            llm = load_llm()
-            if run_baseline_btn:
-                st.subheader("Baseline SQL")
-                sql_query = generate_sql(llm, schema_text, user_question)
-                st.code(sql_query, language="sql")
-            
-            elif run_agent_btn:
-                st.subheader("Agent SQL")
-                # We use st.empty() to show the agent thinking in real-time
-                status_container = st.empty()
-                
-                # Note: To see the print statements from your agent in Streamlit, 
-                # we'd normally need to modify the agent to use st.write(). 
-                # For now, it will just run silently and return the result.
-                sql_query = run_correction_agent(engine, llm, schema_text, user_question)
-                
-                st.code(sql_query, language="sql")
+        st.subheader("Agent SQL")
+        st.code(agent_run.sql, language="sql")
+        show_query_results(engine, agent_run.sql)
+        progress.empty()
 
-        # Execute the final SQL to show the data
-        st.subheader("Query Results")
-        try:
-            with engine.connect() as conn:
-                result = conn.execute(text(sql_query))
-                rows = result.fetchall()
-                
-                if rows:
-                    # Convert to a Pandas DataFrame for a beautiful table
-                    df = pd.DataFrame(rows, columns=result.keys())
-                    st.dataframe(df, use_container_width=True)
-                else:
-                    st.info("The query returned no results.")
-                    
-        except Exception as e:
-            st.error(f"❌ SQL Execution Error:\n{e}")
+        with st.expander("Run details", expanded=False):
+            st.caption(f"{agent_run.path} · {perf_counter() - started_at:.1f} seconds")
+            if agent_run.plan is not None:
+                st.markdown("**Plan**")
+                st.markdown(agent_run.plan)
+            if agent_run.review is not None:
+                st.markdown(f"**Review** · {agent_run.review.status}")
+                if agent_run.review.feedback is not None:
+                    st.write(agent_run.review.feedback)
+            if agent_run.revision is not None:
+                st.caption(agent_run.revision)
 
 st.subheader("Benchmark")
 st.caption("Runs the bundled benchmark questions against the connected database.")

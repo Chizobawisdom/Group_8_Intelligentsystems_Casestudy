@@ -34,7 +34,7 @@ def get_schema_text(engine: Engine | None = None) -> str:
     return format_for_prompt(schema, load_descriptions())
 
 
-def _to_text(content) -> str:
+def response_text(content) -> str:
     """Some providers return a list of content blocks instead of a plain string."""
     if isinstance(content, str):
         return content
@@ -57,12 +57,19 @@ def extract_sql(text: str) -> str:
     return sql.strip().rstrip(";") + ";"
 
 
-def generate_sql(llm, schema_text: str, question: str) -> str:
+def generate_sql(llm, schema_text: str, question: str, *, plan: str | None = None) -> str:
+    request = question
+    if plan is not None:
+        request = (
+            f"Original question\n{question}\n\n"
+            f"Proposed query plan\n{plan}\n\n"
+            "Use the plan as guidance and answer the original question."
+        )
     messages = [
         ("system", SYSTEM_PROMPT.format(schema=schema_text)),
-        ("human", question),
+        ("human", request),
     ]
-    return extract_sql(_to_text(llm.invoke(messages).content))
+    return extract_sql(response_text(llm.invoke(messages).content))
 
 
 def load_questions() -> list[dict]:
@@ -71,15 +78,18 @@ def load_questions() -> list[dict]:
 
 
 def generate_predictions(
-    items: list[dict], predict_sql: Callable[[str], str], *, max_workers: int = 1
+    items: list[dict], predict_sql: Callable[[str], str | dict[str, str]], *, max_workers: int = 1
 ) -> list[dict]:
     def predict_item(item: dict) -> dict:
         print(f"Processing Q{item['id']}...")
+        prediction = predict_sql(item["question"])
+        if isinstance(prediction, str):
+            prediction = {"generated_sql": prediction}
         return {
             "id": item["id"],
             "question": item["question"],
             "gold_sql": item["gold_sql"],
-            "generated_sql": predict_sql(item["question"]),
+            **prediction,
         }
 
     if max_workers == 1:

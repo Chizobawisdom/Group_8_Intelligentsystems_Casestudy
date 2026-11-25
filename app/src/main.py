@@ -19,7 +19,7 @@ from baseline import (
     save_predictions,
 )
 from connect import get_engine
-from correction import run_correction_agent
+from correction import run_agent_with_details
 from evaluator import (
     AGENT_NAME,
     AGENT_PREDICTIONS,
@@ -67,11 +67,17 @@ def main(
         )
 
         print("\n[PHASE 2] Running Agent (Self-Correction Loop)")
+
+        def predict_agent(question: str) -> dict[str, str]:
+            run = run_agent_with_details(engine, llm, schema_text, question)
+            return {"generated_sql": run.sql, "agent_path": run.path}
+
         agent = generate_predictions(
             questions,
-            lambda question: run_correction_agent(engine, llm, schema_text, question),
+            predict_agent,
             max_workers=BENCHMARK_WORKERS,
         )
+        agent_paths = [prediction.pop("agent_path") for prediction in agent]
 
         print("\n[PHASE 3] Evaluating Results")
         reference_results = {}
@@ -90,9 +96,10 @@ def main(
                     "Question": item["question"],
                     "Baseline": "Pass" if baseline_passed else "Fail",
                     "Agent": "Pass" if agent_passed else "Fail",
+                    "Agent path": agent_path,
                 }
-                for item, baseline_passed, agent_passed in zip(
-                    questions, baseline_outcomes, agent_outcomes, strict=True
+                for item, baseline_passed, agent_passed, agent_path in zip(
+                    questions, baseline_outcomes, agent_outcomes, agent_paths, strict=True
                 )
             ],
             elapsed_seconds=perf_counter() - started_at,
