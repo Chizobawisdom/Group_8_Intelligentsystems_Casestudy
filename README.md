@@ -13,7 +13,8 @@ The tool turns plain-English questions about manufacturing data into MariaDB SQL
   - **Planned** asks the planner for a short outline, generates SQL from the question and plan, then asks the critic to review the SQL before execution.
   - **Planned after first draft** starts by generating SQL. If the draft reveals complexity, the agent makes a plan, regenerates the SQL, and sends the new draft to the critic before execution.
 - **Planner** (`app/src/planner.py`) identifies relevant schema fields, filters, and rules for grouping, time boundaries, or ties.
-- **Critic** (`app/src/critic.py`) reviews whether the SQL addresses the original question. Critic feedback or a database execution error can trigger one revision. The retry includes the original question, previous SQL, and feedback.
+- **Critic** (`app/src/critic.py`) reviews whether the SQL addresses the original question. Critic feedback, output validation, or a database execution error can trigger one revision. The retry includes the original question, previous SQL, and feedback.
+- **SQLGlot validation** (`app/src/sql_checks.py`) checks the number of final output columns and direct `ROUND()` calls before execution, using the requirements the critic can determine. The agent repeats the checks after a revision. The benchmark records a remaining validation failure as a failed question.
 - **Evaluator** (`app/src/evaluator.py`) compares query results with the benchmark reference results and calculates execution accuracy.
 
 ## Prerequisites
@@ -54,7 +55,7 @@ For an external database, add `--no-deps` after `--rm` to skip starting the bund
 
 ## Run the benchmark
 
-Select **Run Full Benchmark** in Streamlit to run the 29 bundled questions against the connected database. The questions are written for the bundled manufacturing schema. The results show baseline and agent execution accuracy, total runtime, and each question's pass or fail outcome and **Agent path**.
+Select **Run Full Benchmark** in Streamlit to run the 29 bundled questions against the connected database. The questions are written for the bundled manufacturing schema. The live **Benchmark output** panel streams phase headers, question progress, retries, pass/fail results, and final scores. The complete log stays available after the run. Below it, Streamlit shows both accuracy scores, total runtime, and each question's result and **Agent path**.
 
 The terminal command runs the same benchmark using the database configured for the app container.
 
@@ -63,6 +64,17 @@ docker compose -f Docker-Compose.yml run --rm app python src/main.py
 ```
 
 The benchmark generates baseline and agent predictions independently, with up to two questions in progress at a time during each generation phase. It runs each reference query once per benchmark and reuses its result for both scores. A prediction passes when its returned rows match the reference rows regardless of order. The terminal run prints the scores and saves predictions to `data/benchmark/baseline_predictions.json` and `data/benchmark/agent_predictions.json`.
+
+### Example run
+
+One run on the revised 29-question benchmark on 2026-11-25 produced the following results.
+
+| Mode | Passed | Execution accuracy |
+| --- | ---: | ---: |
+| Baseline | 26/29 | 89.66% |
+| Agent | 28/29 | 96.55% |
+
+The agent answered two additional questions correctly, a gain of **6.90 percentage points** based on the pass counts.
 
 ---
 
