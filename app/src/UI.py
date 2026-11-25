@@ -148,7 +148,10 @@ elif run_agent_btn:
     else:
         st.subheader("Agent SQL")
         st.code(agent_run.sql, language="sql")
-        show_query_results(engine, agent_run.sql)
+        if agent_run.validation_error is not None:
+            st.error(f"The revised SQL still fails output validation. {agent_run.validation_error}")
+        else:
+            show_query_results(engine, agent_run.sql)
         progress.empty()
 
         with st.expander("Run details", expanded=False):

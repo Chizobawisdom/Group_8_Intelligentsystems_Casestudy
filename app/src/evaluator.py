@@ -34,6 +34,10 @@ def evaluate_predictions(
     outcomes = []
     log(f"\n--- Evaluating {system_name} ---")
     for item in predictions:
+        if validation_error := item.get("validation_error"):
+            outcomes.append(False)
+            log(f"Q{item['id']}: ❌ FAIL (output validation). {validation_error}")
+            continue
         generated = execute_sql(engine, item["generated_sql"])
         reference_sql = item["gold_sql"]
         if reference_results is not None and reference_sql in reference_results:

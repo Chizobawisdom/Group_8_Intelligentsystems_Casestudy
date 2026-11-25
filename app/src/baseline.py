@@ -57,7 +57,14 @@ def extract_sql(text: str) -> str:
     return sql.strip().rstrip(";") + ";"
 
 
-def generate_sql(llm, schema_text: str, question: str, *, plan: str | None = None) -> str:
+def generate_sql(
+    llm,
+    schema_text: str,
+    question: str,
+    *,
+    plan: str | None = None,
+    instructions: str | None = None,
+) -> str:
     request = question
     if plan is not None:
         request = (
@@ -65,10 +72,10 @@ def generate_sql(llm, schema_text: str, question: str, *, plan: str | None = Non
             f"Proposed query plan\n{plan}\n\n"
             "Use the plan as guidance and answer the original question."
         )
-    messages = [
-        ("system", SYSTEM_PROMPT.format(schema=schema_text)),
-        ("human", request),
-    ]
+    system_prompt = SYSTEM_PROMPT.format(schema=schema_text)
+    if instructions is not None:
+        system_prompt = f"{system_prompt}\n\n{instructions}"
+    messages = [("system", system_prompt), ("human", request)]
     return extract_sql(response_text(llm.invoke(messages).content))
 
 

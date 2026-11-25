@@ -76,7 +76,7 @@ def main(
 
         def predict_agent(question: str) -> dict[str, str]:
             run = run_agent_with_details(engine, llm, schema_text, question, log=log)
-            return {"generated_sql": run.sql, "agent_path": run.path}
+            return {**run.as_prediction(), "agent_path": run.path}
 
         agent = generate_predictions(
             questions,
