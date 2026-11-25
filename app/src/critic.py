@@ -1,4 +1,5 @@
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from baseline import response_text
@@ -20,7 +21,9 @@ class SQLReview:
     feedback: str | None = None
 
 
-def review_sql(llm, schema_text: str, question: str, sql_query: str) -> SQLReview:
+def review_sql(
+    llm, schema_text: str, question: str, sql_query: str, *, warn: Callable[[str], None] = logger.warning
+) -> SQLReview:
     review_input = (
         f"Original question\n{question}\n\n"
         f"Database schema\n{schema_text}\n\n"
@@ -33,7 +36,7 @@ def review_sql(llm, schema_text: str, question: str, sql_query: str) -> SQLRevie
     try:
         verdict = response_text(llm.invoke(messages).content).strip()
     except Exception as exc:
-        logger.warning("SQL critic unavailable (%s); using database validation.", type(exc).__name__)
+        warn(f"SQL critic unavailable ({type(exc).__name__}). Using database validation.")
         return SQLReview("Review unavailable")
 
     if verdict.upper() == "APPROVE":
@@ -42,5 +45,5 @@ def review_sql(llm, schema_text: str, question: str, sql_query: str) -> SQLRevie
     if label.strip().upper() == "REVISE" and separator and issue.strip():
         return SQLReview("Revision requested", issue.strip())
 
-    logger.warning("SQL critic returned an invalid verdict; using database validation.")
+    warn("SQL critic returned an invalid verdict. Using database validation.")
     return SQLReview("Review unavailable")

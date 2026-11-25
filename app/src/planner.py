@@ -1,4 +1,5 @@
 import logging
+from collections.abc import Callable
 
 from baseline import response_text
 
@@ -11,7 +12,9 @@ Mention missing schema information if it prevents answering the question.
 Return at most five concise bullets of implementation guidance. Do not write SQL."""
 
 
-def plan_query(llm, schema_text: str, question: str) -> str | None:
+def plan_query(
+    llm, schema_text: str, question: str, *, warn: Callable[[str], None] = logger.warning
+) -> str | None:
     messages = [
         ("system", PLANNER_PROMPT),
         ("human", f"Original question\n{question}\n\nDatabase schema\n{schema_text}"),
@@ -19,10 +22,10 @@ def plan_query(llm, schema_text: str, question: str) -> str | None:
     try:
         plan = response_text(llm.invoke(messages).content).strip()
     except Exception as exc:
-        logger.warning("SQL planner unavailable (%s); using direct SQL generation.", type(exc).__name__)
+        warn(f"SQL planner unavailable ({type(exc).__name__}). Using direct SQL generation.")
         return None
 
     if not plan:
-        logger.warning("SQL planner returned an empty plan; using direct SQL generation.")
+        warn("SQL planner returned an empty plan. Using direct SQL generation.")
         return None
     return plan

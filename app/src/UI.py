@@ -1,4 +1,6 @@
 import os
+from concurrent.futures import ThreadPoolExecutor
+from queue import Queue
 from time import perf_counter
 
 import pandas as pd
@@ -9,6 +11,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from connect import create_database_engine
 from baseline import build_llm, generate_sql, get_schema_text
 from correction import run_agent_with_details
+from main import BenchmarkResult
 from main import main as run_benchmark
 
 st.set_page_config(page_title="Agentic NLP to SQL Artefact", page_icon="🤖", layout="wide")
@@ -34,6 +37,24 @@ def show_query_results(engine, sql_query: str) -> None:
                 st.info("The query returned no results.")
     except Exception as exc:
         st.error(f"❌ SQL Execution Error:\n{exc}")
+
+
+def stream_benchmark_output(engine, llm, schema_text: str, lines: list[str], panel) -> BenchmarkResult:
+    messages: Queue[str | None] = Queue()
+
+    def run() -> BenchmarkResult:
+        try:
+            return run_benchmark(engine, llm=llm, schema_text=schema_text, log=messages.put)
+        finally:
+            messages.put(None)
+
+    # Benchmark workers enqueue text. The Streamlit script thread renders the panel.
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(run)
+        while (message := messages.get()) is not None:
+            lines.extend(message.split("\n"))
+            panel.code("\n".join(lines[-14:]), language=None)
+        return future.result()
 
 
 st.sidebar.header("Database connection")
@@ -90,6 +111,7 @@ if st.sidebar.button("Disconnect"):
     engine.dispose()
     del st.session_state.database_connection
     st.session_state.pop("benchmark_result", None)
+    st.session_state.pop("benchmark_output", None)
     st.rerun()
 
 # Create the UI layout
@@ -144,15 +166,25 @@ elif run_agent_btn:
 st.subheader("Benchmark")
 st.caption("Runs the bundled benchmark questions against the connected database.")
 
-if st.button("Run Full Benchmark"):
+run_full_benchmark = st.button("Run Full Benchmark")
+if run_full_benchmark:
     st.session_state.pop("benchmark_result", None)
-    with st.spinner("Running the baseline, agent, and evaluation..."):
+    st.session_state.benchmark_output = []
+
+benchmark_output = st.session_state.get("benchmark_output")
+if benchmark_output is not None:
+    st.subheader("Benchmark output")
+    with st.container(height=320):
+        log_panel = st.empty()
+    if run_full_benchmark:
+        log_panel.code("Starting benchmark...", language=None)
         try:
-            st.session_state.benchmark_result = run_benchmark(
-                engine, llm=load_llm(), schema_text=schema_text
+            st.session_state.benchmark_result = stream_benchmark_output(
+                engine, load_llm(), schema_text, benchmark_output, log_panel
             )
         except Exception:
             st.error("The benchmark could not finish. Check the database and model settings, then try again.")
+    log_panel.code("\n".join(benchmark_output) or "No benchmark output.", language=None)
 
 benchmark_result = st.session_state.get("benchmark_result")
 if benchmark_result is not None:

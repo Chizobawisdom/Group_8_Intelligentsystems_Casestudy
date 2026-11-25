@@ -5,6 +5,7 @@ This script runs the entire workflow:
 2. Agentic Generation (Self-correction loop)
 3. Evaluation (Compare both against the Gold SQL)
 """
+from collections.abc import Callable
 from dataclasses import dataclass
 from time import perf_counter
 
@@ -42,7 +43,11 @@ class BenchmarkResult:
 
 
 def main(
-    engine: Engine | None = None, *, llm=None, schema_text: str | None = None
+    engine: Engine | None = None,
+    *,
+    llm=None,
+    schema_text: str | None = None,
+    log: Callable[[str], None] = print,
 ) -> BenchmarkResult:
     """Run the benchmark, writing prediction files when using the CLI connection."""
     started_at = perf_counter()
@@ -59,33 +64,35 @@ def main(
         if schema_text is None:
             schema_text = get_schema_text() if use_cli_connection else get_schema_text(engine)
 
-        print("[PHASE 1] Running Baseline (Single LLM Call)")
+        log("[PHASE 1] Running Baseline (Single LLM Call)")
         baseline = generate_predictions(
             questions,
             lambda question: generate_sql(llm, schema_text, question),
             max_workers=BENCHMARK_WORKERS,
+            log=log,
         )
 
-        print("\n[PHASE 2] Running Agent (Self-Correction Loop)")
+        log("\n[PHASE 2] Running Agent (Self-Correction Loop)")
 
         def predict_agent(question: str) -> dict[str, str]:
-            run = run_agent_with_details(engine, llm, schema_text, question)
+            run = run_agent_with_details(engine, llm, schema_text, question, log=log)
             return {"generated_sql": run.sql, "agent_path": run.path}
 
         agent = generate_predictions(
             questions,
             predict_agent,
             max_workers=BENCHMARK_WORKERS,
+            log=log,
         )
         agent_paths = [prediction.pop("agent_path") for prediction in agent]
 
-        print("\n[PHASE 3] Evaluating Results")
+        log("\n[PHASE 3] Evaluating Results")
         reference_results = {}
         baseline_outcomes = evaluate_predictions(
-            engine, baseline, BASELINE_NAME, reference_results=reference_results
+            engine, baseline, BASELINE_NAME, reference_results=reference_results, log=log
         )
         agent_outcomes = evaluate_predictions(
-            engine, agent, AGENT_NAME, reference_results=reference_results
+            engine, agent, AGENT_NAME, reference_results=reference_results, log=log
         )
         result = BenchmarkResult(
             baseline_accuracy=execution_accuracy(baseline_outcomes),
@@ -106,10 +113,10 @@ def main(
         )
 
         if use_cli_connection:
-            save_predictions(BASELINE_PREDICTIONS, baseline)
-            save_predictions(AGENT_PREDICTIONS, agent)
+            save_predictions(BASELINE_PREDICTIONS, baseline, log=log)
+            save_predictions(AGENT_PREDICTIONS, agent, log=log)
 
-        print_summary(result.baseline_accuracy, result.agent_accuracy)
+        print_summary(result.baseline_accuracy, result.agent_accuracy, log=log)
         return result
     finally:
         if use_cli_connection:

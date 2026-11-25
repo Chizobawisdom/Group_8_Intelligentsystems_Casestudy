@@ -78,10 +78,14 @@ def load_questions() -> list[dict]:
 
 
 def generate_predictions(
-    items: list[dict], predict_sql: Callable[[str], str | dict[str, str]], *, max_workers: int = 1
+    items: list[dict],
+    predict_sql: Callable[[str], str | dict[str, str]],
+    *,
+    max_workers: int = 1,
+    log: Callable[[str], None] = print,
 ) -> list[dict]:
     def predict_item(item: dict) -> dict:
-        print(f"Processing Q{item['id']}...")
+        log(f"Processing Q{item['id']}...")
         prediction = predict_sql(item["question"])
         if isinstance(prediction, str):
             prediction = {"generated_sql": prediction}
@@ -102,9 +106,11 @@ def generate_predictions(
         executor.shutdown(cancel_futures=True)
 
 
-def save_predictions(path: Path, predictions: list[dict]) -> None:
+def save_predictions(
+    path: Path, predictions: list[dict], *, log: Callable[[str], None] = print
+) -> None:
     path.write_text(json.dumps(predictions, indent=2), encoding="utf-8")
-    print(f"Saved predictions to {path.as_posix()}")
+    log(f"Saved predictions to {path.as_posix()}")
 
 
 def main(n: int | None = None) -> None:

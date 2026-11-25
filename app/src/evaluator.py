@@ -1,4 +1,5 @@
 import json
+from collections.abc import Callable
 from pathlib import Path
 from sqlalchemy import text
 
@@ -28,9 +29,10 @@ def evaluate_predictions(
     system_name: str,
     *,
     reference_results: dict[str, list[tuple] | str] | None = None,
+    log: Callable[[str], None] = print,
 ) -> list[bool]:
     outcomes = []
-    print(f"\n--- Evaluating {system_name} ---")
+    log(f"\n--- Evaluating {system_name} ---")
     for item in predictions:
         generated = execute_sql(engine, item["generated_sql"])
         reference_sql = item["gold_sql"]
@@ -43,10 +45,10 @@ def evaluate_predictions(
         passed = isinstance(generated, list) and generated == expected
         outcomes.append(passed)
         status = "✅ PASS" if passed else "❌ FAIL"
-        print(f"Q{item['id']}: {status}")
+        log(f"Q{item['id']}: {status}")
 
     accuracy = execution_accuracy(outcomes)
-    print(f"Score for {system_name}: {accuracy:.2f}% ({sum(outcomes)}/{len(outcomes)})")
+    log(f"Score for {system_name}: {accuracy:.2f}% ({sum(outcomes)}/{len(outcomes)})")
     return outcomes
 
 
@@ -61,19 +63,21 @@ def evaluate_file(engine, filepath, system_name) -> float:
     return execution_accuracy(evaluate_predictions(engine, predictions, system_name))
 
 
-def print_summary(baseline_acc: float, agent_acc: float) -> None:
-    print("\n=============================================")
-    print("🏆 FINAL RESULTS")
-    print("=============================================")
-    print(f"Baseline Accuracy: {baseline_acc:.2f}%")
-    print(f"Agent Accuracy:    {agent_acc:.2f}%")
+def print_summary(
+    baseline_acc: float, agent_acc: float, *, log: Callable[[str], None] = print
+) -> None:
+    log("\n=============================================")
+    log("🏆 FINAL RESULTS")
+    log("=============================================")
+    log(f"Baseline Accuracy: {baseline_acc:.2f}%")
+    log(f"Agent Accuracy:    {agent_acc:.2f}%")
 
     if agent_acc > baseline_acc:
-        print(f"🚀 The Agent improved performance by {agent_acc - baseline_acc:.2f} percentage points!")
+        log(f"🚀 The Agent improved performance by {agent_acc - baseline_acc:.2f} percentage points!")
     elif agent_acc == baseline_acc:
-        print("🤝 Both systems performed equally.")
+        log("🤝 Both systems performed equally.")
     else:
-        print("📉 The Agent performed worse than the baseline.")
+        log("📉 The Agent performed worse than the baseline.")
 
 
 def main() -> None:

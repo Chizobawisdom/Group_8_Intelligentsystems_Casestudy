@@ -35,7 +35,13 @@ class AgentRun:
 
 
 def run_agent_with_details(
-    engine, llm, schema_text: str, question: str, *, on_stage: Callable[[str], None] | None = None
+    engine,
+    llm,
+    schema_text: str,
+    question: str,
+    *,
+    on_stage: Callable[[str], None] | None = None,
+    log: Callable[[str], None] = print,
 ) -> AgentRun:
     def report(stage: str) -> None:
         if on_stage is not None:
@@ -45,7 +51,7 @@ def run_agent_with_details(
     plan = None
     if complex_question:
         report("Plan")
-        plan = plan_query(llm, schema_text, question)
+        plan = plan_query(llm, schema_text, question, warn=log)
 
     report("Generate SQL")
     sql_query = generate_sql(llm, schema_text, question, plan=plan)
@@ -54,7 +60,7 @@ def run_agent_with_details(
     if needs_review and not complex_question:
         # Some questions only reveal their complexity in the first SQL draft.
         report("Plan after first draft")
-        plan = plan_query(llm, schema_text, question)
+        plan = plan_query(llm, schema_text, question, warn=log)
         if plan is not None:
             report("Regenerate SQL")
             sql_query = generate_sql(llm, schema_text, question, plan=plan)
@@ -67,10 +73,10 @@ def run_agent_with_details(
         else:
             path = "Planned" if complex_question else "Planned after first draft"
         report("Review")
-        review = review_sql(llm, schema_text, question, sql_query)
+        review = review_sql(llm, schema_text, question, sql_query, warn=log)
 
     if review is not None and review.feedback is not None:
-        print("Agent revising SQL after critic review.")
+        log("Agent revising SQL after critic review.")
         feedback = f"Critic feedback\n{review.feedback}"
         revision = "Revision after review"
     else:
@@ -78,7 +84,7 @@ def run_agent_with_details(
         success, error_msg = execute_sql(engine, sql_query)
         if success:
             return AgentRun(sql_query, path, plan, review)
-        print("Agent retrying SQL after a database error.")
+        log("Agent retrying SQL after a database error.")
         feedback = f"Database error\n{error_msg}"
         revision = "Retry after a database error"
 
@@ -94,9 +100,9 @@ def run_agent_with_details(
     report("Execute")
     success, error_msg = execute_sql(engine, revised_sql)
     if success:
-        print("Agent successfully revised the SQL.")
+        log("Agent successfully revised the SQL.")
     else:
-        print(f"Revised SQL failed with database error {error_msg}")
+        log(f"Revised SQL failed with database error {error_msg}")
     return AgentRun(revised_sql, path, plan, review, revision)
 
 
