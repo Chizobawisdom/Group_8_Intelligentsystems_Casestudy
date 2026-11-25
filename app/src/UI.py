@@ -13,7 +13,7 @@ from main import main as run_benchmark
 
 st.set_page_config(page_title="Agentic NLP to SQL Artefact", page_icon="🤖", layout="wide")
 
-st.title("🤖 Agentic NLP-to-SQL Agent")
+st.title("🤖 Agentic NLP-to-SQL Artefact")
 st.markdown("Ask a question in plain English, and the AI Agent will generate and execute the SQL.")
 
 @st.cache_resource
